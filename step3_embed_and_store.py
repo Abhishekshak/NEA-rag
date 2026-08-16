@@ -45,9 +45,17 @@ def expand_synonyms(text):
     return text
 
 
+# Matches Unicode letters (English AND Devanagari/Nepali, etc.) of length
+# 2+, plus standalone numbers. The old pattern (`[a-z]{2,}`) was ASCII-only,
+# so it silently dropped every Devanagari word AND every number — meaning
+# tariff figures and any non-English PDF text were never actually
+# searchable. `\w` in Python's re module is Unicode-aware by default.
+TOKEN_RE = re.compile(r'\b[^\W\d_]{2,}\b|\b\d+\b', re.UNICODE)
+
+
 def tokenize(text):
     text = expand_synonyms(text)
-    return re.findall(r'\b[a-z]{2,}\b', text)
+    return TOKEN_RE.findall(text.lower())
 
 
 class VectorStore:
