@@ -49,24 +49,87 @@ function TypingIndicator() {
   );
 }
 
+// ── Lightweight markdown-ish formatter ──────────────────────────────────
+// The chat model replies with **bold**, blank-line paragraphs, and
+// "- "/"1. " list items. This turns that into real left-aligned HTML
+// (headings, <p>, <ul>/<ol>) instead of one flat string of <br/> tags.
+function escapeHtml(s) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function formatInline(line) {
+  return escapeHtml(line)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g, "<em>$1</em>");
+}
+
+function lineKind(line) {
+  if (/^[-•*]\s+/.test(line)) return "bullet";
+  if (/^\d+[.)]\s+/.test(line)) return "numbered";
+  return "plain";
+}
+
+function formatMessage(text) {
+  const blocks = text.trim().split(/\n\s*\n/); // split into paragraphs/lists
+  const html = [];
+
+  for (const block of blocks) {
+    const lines = block.split("\n").map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) continue;
+
+    // A short line wrapped entirely in ** or a markdown # heads its own block
+    const isHeading =
+      lines.length === 1 &&
+      (/^\*\*(.+)\*\*$/.test(lines[0]) || /^#{1,3}\s+/.test(lines[0])) &&
+      lines[0].length < 90;
+
+    if (isHeading) {
+      const headingText = lines[0].replace(/^#{1,3}\s+/, "").replace(/^\*\*(.+)\*\*$/, "$1");
+      html.push(`<h4>${formatInline(headingText)}</h4>`);
+      continue;
+    }
+
+    // Group contiguous lines of the same kind (plain/bullet/numbered) so an
+    // intro sentence followed by a list — even without a blank line between
+    // them, which the model often does — still renders as text + a real list.
+    let i = 0;
+    while (i < lines.length) {
+      const kind = lineKind(lines[i]);
+      let j = i + 1;
+      while (j < lines.length && lineKind(lines[j]) === kind) j++;
+      const group = lines.slice(i, j);
+
+      if (kind === "bullet") {
+        const items = group.map(l => `<li>${formatInline(l.replace(/^[-•*]\s+/, ""))}</li>`).join("");
+        html.push(`<ul>${items}</ul>`);
+      } else if (kind === "numbered") {
+        const items = group.map(l => `<li>${formatInline(l.replace(/^\d+[.)]\s+/, ""))}</li>`).join("");
+        html.push(`<ol>${items}</ol>`);
+      } else {
+        html.push(`<p>${group.map(formatInline).join("<br/>")}</p>`);
+      }
+      i = j;
+    }
+  }
+
+  return html.join("");
+}
+
 function MessageBubble({ msg }) {
   const isUser = msg.role === "user";
 
   const renderAnswer = (text, sources) => {
     if (!text) return null;
 
-    const formatText = (t) =>
-      t
-        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-        .replace(/\*(.*?)\*/g, "<em>$1</em>")
-        .replace(/• /g, "• ")
-        .replace(/\n/g, "<br/>");
-
     return (
       <div>
         <div
-          style={{ lineHeight: 1.75, fontSize: 14 }}
-          dangerouslySetInnerHTML={{ __html: formatText(text) }}
+          className="msg-content"
+          style={{ textAlign: "left" }}
+          dangerouslySetInnerHTML={{ __html: formatMessage(text) }}
         />
         {sources && sources.length > 0 && (
           <div style={{
@@ -136,7 +199,7 @@ function MessageBubble({ msg }) {
         {msg.typing
           ? <TypingIndicator />
           : isUser
-            ? <div>{msg.content}</div>
+            ? <div style={{ textAlign: "left", whiteSpace: "pre-wrap" }}>{msg.content}</div>
             : renderAnswer(msg.content, msg.sources)
         }
       </div>
@@ -268,6 +331,26 @@ export default function NEAChatbot() {
         textarea:focus { outline: none; }
         button { cursor: pointer; border: none; font-family: inherit; }
         a { color: #00B4D8; }
+
+        /* Assistant message formatting — left-aligned, readable spacing */
+        .msg-content { font-size: 14px; line-height: 1.75; }
+        .msg-content p { margin: 0 0 10px; }
+        .msg-content p:last-child { margin-bottom: 0; }
+        .msg-content h4 {
+          font-size: 14px;
+          font-weight: 700;
+          color: #F8FAFC;
+          margin: 14px 0 6px;
+        }
+        .msg-content h4:first-child { margin-top: 0; }
+        .msg-content ul, .msg-content ol {
+          margin: 0 0 10px;
+          padding-left: 20px;
+        }
+        .msg-content ul:last-child, .msg-content ol:last-child { margin-bottom: 0; }
+        .msg-content li { margin-bottom: 4px; }
+        .msg-content li:last-child { margin-bottom: 0; }
+        .msg-content strong { color: #F8FAFC; font-weight: 700; }
       `}</style>
 
       {/* ── Sidebar ──────────────────────────────────────────────────── */}
