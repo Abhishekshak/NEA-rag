@@ -4,7 +4,7 @@ STEP 5 — INTERACTIVE CHAT
 Terminal chat. Streams answers word by word from Groq.
 
 Your laptop : scraping, chunking, TF-IDF retrieval (pure Python)
-Groq cloud  : LLM generation (Llama 3.3 70B, free)
+Groq cloud  : LLM generation (openai/gpt-oss-20b, free)
 Ollama      : NOT needed at all
 
 Run: python step5_chat.py

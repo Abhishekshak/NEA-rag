@@ -2,7 +2,7 @@
 STEP 4 — RAG QUERY ENGINE
 ==========================
   Retrieval : TF-IDF vector store (local, pure Python)
-  Generation: Groq llama-3.3-70b-versatile (free cloud)
+  Generation: Groq openai/gpt-oss-20b (free cloud)
 
 Run: python step4_rag_query.py
 """
@@ -27,9 +27,12 @@ except ImportError:
 # ── CONFIG ──────────────────────────────────────────────
 DB_FILE      = "db/vector_store.pkl"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-CHAT_MODEL   = "llama-3.3-70b-versatile"
+CHAT_MODEL   = "openai/gpt-oss-20b"
 TOP_K        = 4
 # ────────────────────────────────────────────────────────
+
+if not GROQ_API_KEY:
+    raise ValueError("GROQ_API_KEY not set. Add it to your .env file.")
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 
@@ -39,8 +42,15 @@ def load_store():
         return pickle.load(f)
 
 
+def clean_source_url(url):
+    """Remove local file paths, only return real URLs."""
+    if not url or url.startswith("local-pdf://") or url.startswith("file://"):
+        return None
+    return url.rstrip("/")
+
+
 def retrieve(store, question, top_k=TOP_K):
-    """TF-IDF retrieval with synonym expansion (handles MD, bijuli etc.)"""
+    """TF-IDF retrieval with synonym expansion."""
     return store.query(question, n_results=top_k)
 
 
@@ -53,18 +63,22 @@ def build_prompt(question, chunks):
             f"{chunk['text']}"
         )
     context = "\n\n---\n\n".join(context_parts)
-    return f"""You are a knowledgeable and helpful assistant for Nepal Electricity Authority (NEA).
-Use ONLY the context provided below to answer the question.
-Give a detailed, well-structured answer. Use bullet points where appropriate.
-If the answer is not in the context, say: "I don't have that specific information. Please visit nea.org.np or call 1400."
-Do NOT add a Sources section — sources are handled separately.
+
+    return f"""You are a friendly and knowledgeable assistant for Nepal Electricity Authority (NEA).
+
+INSTRUCTIONS:
+- If the user sends a greeting (like "hi", "hello", "namaste", "how are you", etc.) or any casual/non-NEA message, respond warmly and naturally. Tell them you are the NEA assistant and list what you can help with (tariffs, no-light numbers, new connections, bill payment, careers, projects, etc.).
+- For NEA-related questions, use ONLY the context below to answer.
+- Give detailed, well-structured answers with bullet points where appropriate.
+- If a specific NEA question is not answered in the context, say: "I don't have that specific information. Please visit nea.org.np or call 1400."
+- Do NOT add a Sources section.
 
 CONTEXT:
 {context}
 
-QUESTION: {question}
+USER: {question}
 
-ANSWER:"""
+RESPONSE:"""
 
 
 def ask(question, store):
@@ -84,7 +98,12 @@ def ask(question, store):
     )
 
     answer  = response.choices[0].message.content
-    sources = list(dict.fromkeys(c["metadata"]["source_url"] for c in chunks))
+    sources = list(dict.fromkeys(
+        clean_source_url(c["metadata"]["source_url"])
+        for c in chunks
+        if clean_source_url(c["metadata"]["source_url"])
+    ))
+
     print(f"\nAnswer:\n{answer}")
     return answer, sources
 
@@ -93,6 +112,7 @@ if __name__ == "__main__":
     store = load_store()
     print(f"Loaded {store.count()} chunks | Model: {CHAT_MODEL}\n")
 
-    for q in ["Who is the MD of NEA?", "tariff for 0-20 units", "no light number Baneshwor"]:
+    for q in ["hi", "hello", "how are you", "Who is the MD of NEA?",
+              "tariff for 0-20 units", "no light number Baneshwor"]:
         ask(q, store)
         print()

@@ -34,6 +34,16 @@ SYNONYMS = {
     r'\bcomplaint\b':           'complaint complain grievance',
     r'\bsmart meter\b':         'smart meter prepaid meter',
     r'\bload.?shedding\b':      'load shedding power cut outage',
+    r'\b0-20\b':                '0 to 20 units zero twenty',
+    r'\b21-30\b':               '21 to 30 units',
+    r'\b51-150\b':         '51 to 150 units',
+    r'\btariff\b':         'tariff rate price unit cost charge',
+    r'\brate\b':           'rate tariff price unit cost',
+    r'\bhow much\b':       'how much price cost rate tariff unit',
+    r'\bper unit\b':       'per unit rate price tariff cost',
+    r'\belectricity cost\b': 'electricity cost tariff rate unit price',
+    r'\bbill\b':           'bill payment invoice tariff rate',
+    r'\bslab\b':           'slab tariff rate units range',
 }
 
 
