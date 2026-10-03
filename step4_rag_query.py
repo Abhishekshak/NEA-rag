@@ -2,13 +2,14 @@
 STEP 4 — RAG QUERY ENGINE
 ==========================
   Retrieval : TF-IDF vector store (local, pure Python)
-  Generation: Groq openai/gpt-oss-20b (free cloud)
+  Generation: Groq qwen/qwen3.8-27b (free tier)
 
 Run: python step4_rag_query.py
 """
 
 import os
 import pickle
+import re
 from groq import Groq
 
 # Load .env file
@@ -27,7 +28,7 @@ except ImportError:
 # ── CONFIG ──────────────────────────────────────────────
 DB_FILE      = "db/vector_store.pkl"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-CHAT_MODEL   = "openai/gpt-oss-20b"
+CHAT_MODEL   = "qwen/qwen3.8-27b"
 TOP_K        = 4
 # ────────────────────────────────────────────────────────
 
@@ -51,7 +52,21 @@ def clean_source_url(url):
 
 def retrieve(store, question, top_k=TOP_K):
     """TF-IDF retrieval with synonym expansion."""
-    return store.query(question, n_results=top_k)
+    search_text = question
+    if re.search(r'\b(tariff|rate|electricity price)\b', question, re.I):
+        search_text = re.sub(r'\b3(?:\s*[- ]?\s*phase)?\b', 'three phase', search_text, flags=re.I)
+    if re.search(r'\b(no.?light|power outage)\b', question, re.I) and re.search(r'\bdurbarmarg\b', question, re.I):
+        # NEA's indexed outage list is organized by service area; Durbarmarg
+        # itself is not listed, while the Kathmandu service-area list is relevant.
+        search_text += ' Kathmandu Bagmati Ratnapark'
+    results = store.query(search_text, n_results=store.count())
+    if re.search(r'\b(tariff|rate|electricity price)\b', question, re.I):
+        results = [r for r in results if 'tariff' in r['metadata']['source_title'].lower()]
+        if 'three phase' in search_text.lower():
+            results.sort(key=lambda r: 'three phase' not in r['metadata']['source_title'].lower())
+    elif re.search(r'\b(no.?light|power outage)\b', question, re.I):
+        results = [r for r in results if 'no light' in r['metadata']['source_title'].lower()]
+    return results[:top_k]
 
 
 def build_prompt(question, chunks):
@@ -71,6 +86,7 @@ INSTRUCTIONS:
 - For NEA-related questions, use ONLY the context below to answer.
 - Give detailed, well-structured answers with bullet points where appropriate.
 - If a specific NEA question is not answered in the context, say: "I don't have that specific information. Please visit nea.org.np or call 1400."
+- For location questions, do not present a nearby service area's number as the exact requested location. If context has a likely nearby listing, name that locality and clearly say the exact location was not listed.
 - Do NOT add a Sources section.
 
 CONTEXT:

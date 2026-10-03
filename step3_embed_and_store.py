@@ -14,6 +14,7 @@ import math
 import pickle
 import os
 import re
+import sys
 
 INPUT_FILE = "data/chunks.json"
 DB_FILE    = "db/vector_store.pkl"
@@ -21,6 +22,8 @@ DB_FILE    = "db/vector_store.pkl"
 # Synonym map — expands abbreviations before indexing/querying
 # This fixes "MD" not matching "Managing Director" etc.
 SYNONYMS = {
+    # Users often say "3" when they mean a three-phase connection.
+    r'\b3(?:\s*[- ]?\s*phase)?\b': 'three phase',
     r'\bmd\b':                  'managing director',
     r'\bmd of nea\b':           'managing director nea',
     r'\bceo\b':                 'managing director chief executive',
@@ -126,6 +129,14 @@ class VectorStore:
 
     def count(self):
         return len(self.texts)
+
+
+# When this file is run as a script, give the class the same import path it
+# has when app.py loads the store. Otherwise pickle records `__main__` and
+# the FastAPI process cannot resolve the class while unpickling.
+if __name__ == "__main__":
+    sys.modules.setdefault("step3_embed_and_store", sys.modules[__name__])
+    VectorStore.__module__ = "step3_embed_and_store"
 
 
 def run_embedder():
